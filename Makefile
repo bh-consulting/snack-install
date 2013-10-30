@@ -2,7 +2,7 @@ all: clean
 	sudo git clone https://github.com/bh-consulting/snack.git interface
 	sudo cp -a paquet paquet_deb
 	sudo cp db/*.sql paquet_deb/tmp/snack/
-	sudo cp -R ../interface paquet_deb/home/snack/interface
+	sudo cp -R interface paquet_deb/home/snack/interface
 	sudo find paquet_deb -name .svn -exec rm -r {} +
 	sudo chmod 0440 paquet_deb/etc/sudoers.d/snack
 	sudo chown www-data:www-data paquet_deb/home/snack/interface/app/Config/parameters.php
