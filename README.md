@@ -6,7 +6,7 @@ apt-get install git whiptail make sudo unzip wget
 Pour Ubuntu
 apt-get install git make wget unzip
 
-wget https://github.com/bh-consulting/snack-install.git
+wget https://github.com/bh-consulting/snack-install/archive/master.zip
 
 make 
 
