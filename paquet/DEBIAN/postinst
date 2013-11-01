@@ -237,15 +237,12 @@ echo 75 | whiptail \
 	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring Mysql for Radius...\nConfigure Freeradius." \
 	10 70 0
 
-sed\
-	-e 's/#\(\s*\$INCLUDE sql\.conf\)/\1/'\
-	-e 's/#\(\s*\$INCLUDE sql\/mysql\/counter.conf\)/\1/'\
-	-e 'N; s/\(#\s*clients\s*=\s*per_socket_clients.*\)\(}\)/\1\tvirtual_server = snack\n\2/'\
-	-e 's/\(\$INCLUDE clients\.conf\)/#\1/'\
-        -e 's/\(auth\s*=\).*/\1 yes/'\
-	-e 's/\(auth_badpass\s*=\).*/\1 yes/'\
-	-i $RADIUSD_CONF \
->> $OUT 2>>$LOG
+sed -e 's/#\(\s*\$INCLUDE sql\.conf\)/\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+sed -e 's/#\(\s*\$INCLUDE sql\/mysql\/counter.conf\)/\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+sed -e 'N; s/\(#\s*clients\s*=\s*per_socket_clients.*\)\(}\)/\1\tvirtual_server = snack\n\2/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+sed -e 's/\(\$INCLUDE clients\.conf\)/#\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+sed -e 's/\(auth\s*=\).*/\1 yes/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+sed -e 's/\(auth_badpass\s*=\).*/\1 yes/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
 
 read ADD <<STUFF
 rewrite_calling_station_id { \\\n\
