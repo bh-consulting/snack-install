@@ -26,38 +26,28 @@ if [ $? != 0 ]; then
 		10 70
 	exit 1
 fi
-RES=`rsync -avr paquet/home/snack/scripts /home/snack`
-if [ "$RES" -ne "1" ]; then
-    echo 20 | whiptail \
+rsync -avr paquet/home/snack/scripts /home/snack
+echo 20 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\n Copying new files of web interface..." 10 70 0    
-fi
-RES=`chown -R $INTERFACE_USER $USER_HOME/scripts`
-if [ "$RES" -ne "1" ]; then
-    echo 40 | whiptail \
+chown -R $INTERFACE_USER $USER_HOME/scripts
+echo 40 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\n Copying new files of web interface..." 10 70 0    
-fi
-RES=`chmod -R $ONLY_INTERFACE_ACCESS $USER_HOME/scripts`
-if [ "$RES" -ne "1" ]; then
-    echo 60 | whiptail \
+chmod -R $ONLY_INTERFACE_ACCESS $USER_HOME/scripts
+echo 60 | whiptail \
+	--title "SNACK ${VERSION}" \
+	--gauge "\n\n Copying new files of web interface..." 10 70 0   
+chown snmp:snack $BACKUP_CREATE_SCRIPT
+chmod 0550 $BACKUP_CREATE_SCRIPT
+echo 80 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\n Copying new files of web interface..." 10 70 0    
-fi
-RES=`chown snmp:snack $BACKUP_CREATE_SCRIPT`
-RES=`chmod 0550 $BACKUP_CREATE_SCRIPT`
-if [ "$RES" -ne "1" ]; then
-    echo 80 | whiptail \
+chown snmp:snack $BACKUP_TRAPS_SCRIPT
+chmod 0550 $BACKUP_TRAPS_SCRIPT
+echo 100 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\n Copying new files of web interface..." 10 70 0    
-fi
-RES=`chown snmp:snack $BACKUP_TRAPS_SCRIPT`
-RES=`chmod 0550 $BACKUP_TRAPS_SCRIPT`
-if [ "$RES" -ne "1" ]; then
-    echo 100 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\n Copying new files of web interface..." 10 70 0    
-fi
 whiptail \
 	--title "SNACK ${VERSION}" \
 	--ok-button "Finish" \
