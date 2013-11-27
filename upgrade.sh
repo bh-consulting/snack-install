@@ -45,6 +45,7 @@ echo 80 | whiptail \
 	--gauge "\n\n Copying new files of web interface..." 10 70 0    
 chown snmp:snack $BACKUP_TRAPS_SCRIPT
 chmod 0550 $BACKUP_TRAPS_SCRIPT
+chmod +x $USER_HOME/scripts
 echo 100 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\n Copying new files of web interface..." 10 70 0    
