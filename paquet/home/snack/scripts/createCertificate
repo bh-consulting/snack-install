@@ -2,17 +2,27 @@
 
 # Check parameters.
 # We need the path where create the certificate and also some information to put in the certificate.
-if [ ! $# -eq 6 ]
+if [ $# -eq 6 ]
 then
-	echo "Usage: createCertificate CertsDirectory Username Country Province Locality Organization"
-	exit 1
-else
-        CERTS_DIR=$1
+	CERTS_DIR=$1
         USERNAME=$2
+	PASSWORD=""
         COUNTRY=$3
         PROVINCE=$4
         LOCALITY=$5
         ORGANIZATION=$6
+elif [ $# -eq 7 ]
+then
+	CERTS_DIR=$1
+        USERNAME=$2
+	PASSWORD=$3
+        COUNTRY=$4
+        PROVINCE=$5
+        LOCALITY=$6
+        ORGANIZATION=$7
+else
+	echo "Usage: createCertificate CertsDirectory Username (Password optional) Country Province Locality Organization"
+	exit 1
 fi
 
 USERFILESPATH=${CERTS_DIR}/users
@@ -53,7 +63,7 @@ then
 fi
 
 # Export to p12 format
-openssl pkcs12 -password pass: -export -in ${USERFILESPATH}/${USERCERT} -inkey ${USERFILESPATH}/${USERKEY} -out ${USERFILESPATH}/${USERP12} -clcerts
+openssl pkcs12 -password pass:${PASSWORD} -export -in ${USERFILESPATH}/${USERCERT} -inkey ${USERFILESPATH}/${USERKEY} -out ${USERFILESPATH}/${USERP12} -clcerts
 if [ ! $? -eq 0 ]
 then
 	echo "Export to p12 format failed!"
