@@ -1,5 +1,7 @@
 all: clean
-	sudo git clone https://github.com/bh-consulting/snack.git interface
+	sudo wget https://github.com/bh-consulting/snack/archive/master.zip
+	sudo unzip master.zip
+	sudo mv snack-master interface
 	sudo cp -a paquet paquet_deb
 	sudo cp db/*.sql paquet_deb/tmp/snack/
 	sudo cp -R interface paquet_deb/home/snack/interface
