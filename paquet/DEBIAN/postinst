@@ -8,6 +8,7 @@ PAQUETNAME=snack
 VERSION=1.0
 DATABASE=radius
 
+USER=snack
 USER_HOME=/home/snack
 TMP=/tmp/snack
 SSL_CONF=/etc/ssl/openssl.cnf
@@ -59,6 +60,9 @@ STEP=1
 LAST_STEP=7
 DISPLAY_SLEEP=0.5
 
+
+
+function install {
 whiptail \
 	--title "SNACK ${VERSION}" \
 	--yes-button "Start" \
@@ -74,7 +78,13 @@ if [ $? != 0 ]; then
 	exit 1
 fi
 
-
+#########################################################################################################################################################
+# Copying of configuration files (sudoers, apache2, syslog-ng, freeradius) / Copie des fichiers configurations (sudoers, apache2, syslog-ng, freeradius)#
+#########################################################################################################################################################
+rsync -avr /home/snack/conf/* /etc >> $OUT 2>>$LOG
+cp /home/snack/interface/app/Config/parameters.php.default /home/snack/interface/app/Config/parameters.php
+cp /home/snack/interface/app/Config/database.php.default /home/snack/interface/app/Config/database.php
+chown www-data:www-data /home/snack/interface/app/Config/parameters.php
 
 echo 0 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -700,7 +710,11 @@ sed\
 	-i /etc/default/snmpd
 
 sed\
-	-e "s|\(TFTP_DIRECTORY=\"\)/var/lib/tftpboot|\1$TFTP_FOLDER|" \
+	-e "s|\(TFTP_DIRECTORY=\"\).*$|\1$TFTP_FOLDER\"|" \
+	-i /etc/default/tftpd-hpa
+	
+sed\
+	-e "s|\(TFTP_USERNAME=\"\).*$|\1$USER\"|" \
 	-i /etc/default/tftpd-hpa
 } >> $OUT 2>>$LOG
 
@@ -779,4 +793,22 @@ whiptail \
 	10 70
 
 exit 0
+}
+
+case $1 in
+    configure)
+        if [ "$2" == ""  ]; then
+            echo "INSTALLATION"
+            install
+        else
+            echo "UPGRADE from $2"
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        # Do nothing
+        ;;
+    *)
+        echo "Unrecognized postinst argument '$1'"
+        ;;
+esac
 
