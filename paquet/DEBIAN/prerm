@@ -1,22 +1,18 @@
 #!/bin/bash
 case $1 in
     upgrade)
-        if [ "$2" == ""  ]; then
-            echo "Unrecognized postinst argument '$2'"
-        else
-            echo "UPGRADE to $2"
-            mkdir /tmp/backup-snack
-            cp /home/snack/interface/app/Config/database.php /tmp/backup-snack
-            cp /home/snack/interface/app/Config/parameters.php /tmp/backup-snack
-            MYSQLPASSWORD=`grep "password" /home/snack/interface/app/Config/database.php | head -n 1 | cut -d"'" -f4`
-            mysqldump -u radius --password=$MYSQLPASSWORD radius > /tmp/backup-snack/snack-`date "+%Y%m%d"`.sql
-        fi
+        echo "UPGRADE to $2"
+        mkdir /tmp/backup-snack
+        cp /home/snack/interface/app/Config/database.php /tmp/backup-snack
+        cp /home/snack/interface/app/Config/parameters.php /tmp/backup-snack
+        MYSQLPASSWORD=`grep "password" /home/snack/interface/app/Config/database.php | head -n 1 | cut -d"'" -f4`
+        mysqldump -u radius --password=$MYSQLPASSWORD radius > /tmp/backup-snack/snack-`date "+%Y%m%d"`.sql
         ;;
     failed-upgrade)
         # Do nothing
         ;;
     *)
-        echo "Unrecognized postinst argument '$1'"
+        echo "Unrecognized prerm argument '$1'"
         ;;
 esac
 exit 0

@@ -1,12 +1,11 @@
 #!/bin/bash
 case $1 in
-    configure)
-        if [ "$2" == ""  ]; then
-            echo "INSTALLATION"
-            useradd -d /home/snack snack -m -r -s /bin/false -U
-        else
-            echo "UPGRADE from $2"
-        fi
+    install)
+        echo "INSTALLATION"
+        useradd -d /home/snack snack -m -r -s /bin/false -U
+        ;;
+    upgrade)
+        echo "UPGRADE from $2"
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
         # Do nothing
