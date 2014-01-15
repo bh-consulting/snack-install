@@ -802,6 +802,8 @@ case $1 in
             install
         else
             echo "UPGRADE from $2"
+            cp /tmp/backup-snack/parameters.php /home/snack/interface/app/Config
+            cp /tmp/backup-snack/database.php /home/snack/interface/app/Config
         fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)

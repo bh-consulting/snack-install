@@ -1,5 +1,18 @@
 #!/bin/bash
-
-useradd -d /home/snack snack -m -r -s /bin/false -U
-
+case $1 in
+    configure)
+        if [ "$2" == ""  ]; then
+            echo "INSTALLATION"
+            useradd -d /home/snack snack -m -r -s /bin/false -U
+        else
+            echo "UPGRADE from $2"
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        # Do nothing
+        ;;
+    *)
+        echo "Unrecognized postinst argument '$1'"
+        ;;
+esac
 exit 0
