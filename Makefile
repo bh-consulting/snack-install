@@ -9,13 +9,13 @@ all: clean
 	sudo chmod 0440 paquet_deb/home/snack/conf/sudoers.d/snack
 	sudo chown root:root paquet_deb/home/snack/conf/sudoers.d/snack
 	sudo chmod 777 -R paquet_deb/home/snack/interface/app/tmp
-	sudo dpkg-deb --build paquet_deb snack.deb
+	sudo ./tools/scriptVersion.sh
 
 install:
 	sudo dpkg -i snack.deb || (sudo apt-get update && sudo apt-get -y --force-yes -f install)
 
 clean:
-	sudo rm -fr paquet_deb snack.deb
+	sudo rm -fr paquet_deb snack*.deb
 	sudo rm -rf master.zip
 	sudo rm -rf interface
 
