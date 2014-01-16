@@ -20,4 +20,5 @@ if [[ $? == 1 ]]; then
     NEWVERSION=$(whiptail --inputbox "Enter the version number you want?" 8 78 --title "Version Number" 3>&1 1>&2 2>&3)
 fi
 sed -e "s/Version: $VERSION/Version: $NEWVERSION/" -i paquet/DEBIAN/control
+sed -e "s/SNACK 1.0/SNACK $NEWVERSION/" -i paquet/home/snack/interface/app/View/Layouts/default.ctp
 dpkg-deb --build paquet_deb "snack_"$NEWVERSION"_deb7u1_all.deb"
