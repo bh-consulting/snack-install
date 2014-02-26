@@ -183,7 +183,6 @@ CREATE TABLE radius.radgroup (
 #
 # 'backup_freeradius.sql'
 #
-CREATE USER 'logsfreeradius'@'localhost' IDENTIFIED BY 'logsfreeradius';
 
 CREATE TABLE radius.logs (
 	id bigint unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -197,8 +196,7 @@ CREATE TABLE radius.logs (
 	msg text
 );
 
-GRANT ALL ON radius.logs TO 'logsfreeradius'@'localhost';
-
+GRANT ALL ON radius.logs TO 'logsfreeradius'@'localhost' IDENTIFIED BY 'logsfreeradius';
 
 #
 # 'gitCommit.sql' 

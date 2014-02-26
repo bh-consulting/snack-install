@@ -24,12 +24,21 @@ db_name=$(extract_db database)
 db_host=$(extract_db host)
 db_prefix=$(extract_db prefix)
 
+DEBUGFILE=~snack/scripts/debug
+DEBUGOUT=/tmp/traps_debug.out
 
 read NAS_IP_ADDRESS
 for i in {1..3}; do read void; done
 read ccmHistoryEventCommandSource
 read ccmHistoryEventConfigSource
 read ccmHistoryEventConfigDestination
+if [ -f $DEBUGFILE ]; then
+    echo "-------" >> $DEBUGOUT
+    echo $NAS_IP_ADDRESS >> $DEBUGOUT
+    echo $ccmHistoryEventCommandSource >> $DEBUGOUT
+    echo $ccmHistoryEventConfigSource >> $DEBUGOUT
+    echo $ccmHistoryEventConfigDestination >> $DEBUGOUT
+fi
 
 read sql_tftpdone <<SQL
     UPDATE ${db_prefix}backups\\
@@ -56,7 +65,7 @@ if [[\
     && "$ccmHistoryEventConfigSource" =~ $oid_ccmHistoryEventConfigSource.[0-9]+\ 3 \
     && "$ccmHistoryEventConfigDestination" =~ $oid_ccmHistoryEventConfigDestination.[0-9]+\ 4 \
 ]]; then
-
+	
     users=$(/usr/bin/mysql -B -h $db_host -u $db_login -p$db_password $db_name\
 	-e "$sql_sessionusers" | tail -n+2  | paste -sd ,)
 
@@ -64,6 +73,10 @@ if [[\
     export USER_NAME=$users
     export ACCT_STATUS_TYPE=Write
 
+    if [ -f $DEBUGFILE ]; then
+	echo $users >> $DEBUGOUT
+	echo "Write" >> $DEBUGOUT
+    fi
     ~snack/scripts/backup_create.sh
 
 # Trap tftp done when receiving configuration (backup).
@@ -73,6 +86,9 @@ elif [[\
     && "$ccmHistoryEventConfigDestination" =~ $oid_ccmHistoryEventConfigDestination.[0-9]+\ 6 \
 ]]; then
 
+    if [ -f $DEBUGFILE ]; then
+        echo "Receiving configuration tftp-DONE" >> $DEBUGOUT
+    fi
     cd ~snack/backups.git/
 
     /usr/bin/git add $NAS_IP_ADDRESS
@@ -96,6 +112,9 @@ elif [[\
     && "$ccmHistoryEventConfigDestination" =~ $oid_ccmHistoryEventConfigDestination.[0-9]+\ 4 \
 ]]; then
     
+    if [ -f $DEBUGFILE ]; then
+        echo "Sending configuration tftp-DONE" >> $DEBUGOUT
+    fi   
     cd ~snack/backups.git/
     rm $NAS_IP_ADDRESS.pid
 
@@ -114,6 +133,10 @@ elif [[\
     export USER_NAME=$users
     export ACCT_STATUS_TYPE=Reload
 
+    if [ -f $DEBUGFILE ]; then
+        echo $users >> $DEBUGOUT
+        echo "Reload" >> $DEBUGOUT
+    fi
     ~snack/scripts/backup_create.sh
 
 
