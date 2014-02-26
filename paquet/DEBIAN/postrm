@@ -1,0 +1,16 @@
+#!/bin/bash
+case $1 in
+    purge)
+        echo "PURGING CONFIG FILES"
+	deluser snack
+	groupdel snack
+        MYSQLPASSWORD=`grep "password" /home/snack/interface/app/Config/database.php | head -n 1 | cut -d"'" -f4`
+        echo "DROP DATABASE radius;" | mysql -uroot --password=$MYSQLPASSWORD
+	rm -rf /home/snack
+	;;
+    *)
+        echo "Unrecognized prerm argument '$1'"
+        ;;
+esac
+exit 0
+
