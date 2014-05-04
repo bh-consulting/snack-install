@@ -35,6 +35,7 @@ RADIUS_USER=freerad
 CA_KEY=cakey.pem
 CA_REQ=careq.pem
 CA_CERT=cacert.pem
+CA_CERT_CER=cacert.cer
 
 RADIUS_KEY=radius_key.pem
 RADIUS_REQ=radius_req.pem
@@ -55,11 +56,41 @@ BACKUP_CONFIG_SCRIPT=$USER_HOME/scripts/backupConfig.sh
 BACKUP_CREATE_SCRIPT=$USER_HOME/scripts/backup_create.sh
 BACKUP_TRAPS_SCRIPT=$USER_HOME/scripts/backup_traps.sh
 TFTP_FOLDER=$USER_HOME/backups.git
+TFTP_OPTIONS="--secure -c -U 525"
 
 STEP=1
 LAST_STEP=7
 DISPLAY_SLEEP=0.5
 
+
+function lessstrict_than_version {
+     VER=$1
+     VER2=$2
+     VERMAJ=`echo $VER | cut -d'.' -f1`
+     VERTMP=`echo $VER | cut -d'.' -f2`
+     VERMIN=`echo $VERTMP | cut -d'-' -f1`
+     VERREL=`echo $VERTMP | cut -d'-' -f2`
+ 
+     VERMAJ2=`echo $VER2 | cut -d'.' -f1`
+     VERTMP=`echo $VER2 | cut -d'.' -f2`
+     VERMIN2=`echo $VERTMP | cut -d'-' -f1`
+     VERREL2=`echo $VERTMP | cut -d'-' -f2`
+ 
+ 
+     if [ "$VERMAJ" -eq "$VERMAJ2" ]; then
+         if [ "$VERMIN" -eq "$VERMIN2" ]; then
+             if [ "$VERREL" -eq "$VERREL2" ]; then
+                 return 0
+             elif [ "$VERREL" -lt "$VERREL2" ]; then
+                 return 1
+             fi
+         elif [ "$VERMIN" -lt "$VERMIN2" ]; then
+             return 1
+         fi
+     elif [ "$VERMAJ" -lt "$VERMAJ2" ]; then
+         return 1
+     fi
+}
 
 
 function install {
@@ -377,11 +408,18 @@ openssl ca \
 	-selfsign \
 	-extensions v3_ca \
 	-infiles $DEST_PATH/private/$CA_REQ
+
+openssl x509 \
+	-outform der \
+	-in $DEST_PATH/private/$CA_CERT \
+	-out $DEST_PATH/private/$CA_CERT_CER
 } >> $OUT 2>>$LOG
 
 # Symlink for the interface
 ln -s $DEST_PATH/private/$CA_CERT $DEST_PATH/$CA_CERT
+ln -s $DEST_PATH/private/$CA_CERT_CER $DEST_PATH/$CA_CERT_CER
 chown $INTERFACE_USER: $DEST_PATH/$CA_CERT
+chown $INTERFACE_USER: $DEST_PATH/$CA_CERT_CER
 
 echo 30 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -418,6 +456,7 @@ openssl ca \
 	-config /etc/ssl/openssl.cnf \
 	-policy policy_anything \
 	-out $DEST_PATH/private/$RADIUS_CERT \
+	-days $CA_CERT_VALIDITY \
 	-batch \
 	-extensions xpserver_ext \
 	-infiles $DEST_PATH/private/$RADIUS_REQ
@@ -502,6 +541,7 @@ echo 70 | whiptail \
 # TLS
 sed\
     -e "/Read the 'users' file/ {N; s/\(.*\n\s*\)files/\1# files/; }"\
+    -e '0,/#\(\s*sql\)/s//\1/'\
     -e '/Authorization Queries/ {N; s/\(.*\n\)\(\s*\)#\?sql/\1\2sql\n\n\2update control {\n\2\2EAP-Type := MD5-CHALLENGE\n\2}/;}'\
 	-i $INNER_TUNNEL_VIRTUAL_SERVER \
 >> $OUT 2>>$LOG
@@ -698,7 +738,7 @@ exec snack-backups {
 }
 MODULES
 sed\
-	-e "/exec/c \\\texec /usr/sbin/in.tftpd --listen --user snack --address 0.0.0.0:69 --secure $TFTP_FOLDER -c"\
+	-e "/exec/c \\\texec /usr/sbin/in.tftpd --listen --user snack --address 0.0.0.0:69 --secure $TFTP_FOLDER -c -U 525"\
 	-i /etc/init/tftpd-hpa.conf
 
 sed\
@@ -712,7 +752,11 @@ sed\
 sed\
 	-e "s|\(TFTP_DIRECTORY=\"\).*$|\1$TFTP_FOLDER\"|" \
 	-i /etc/default/tftpd-hpa
-	
+
+sed\
+	-e "s|\(TFTP_OPTIONS=\"\).*$|\1$TFTP_OPTIONS\"|" \
+	-i /etc/default/tftpd-hpa	
+
 sed\
 	-e "s|\(TFTP_USERNAME=\"\).*$|\1$USER\"|" \
 	-i /etc/default/tftpd-hpa
@@ -802,9 +846,56 @@ case $1 in
             install
         else
             echo "UPGRADE from $2"
-            cp /tmp/backup-snack/parameters.php /home/snack/interface/app/Config
-            cp /tmp/backup-snack/database.php /home/snack/interface/app/Config
-        fi
+	    rsync -avr /home/snack/conf/sudoers.d /etc >> $OUT 2>>$LOG
+            cp /root/backup-snack/parameters.php /home/snack/interface/app/Config
+            cp /root/backup-snack/database.php /home/snack/interface/app/Config
+       	    rm -rf /root/backup-snack
+	    dpkg --compare-versions $2 le 1.0-9
+	    if [[ $? == 0 ]]; then
+	        sed -e "s/unique_subject\s*=\s*yes\s*/unique_subject = no/" -i $DEST_PATH/index.txt.attr
+		openssl ca \
+        		-config /etc/ssl/openssl.cnf \
+        		-policy policy_anything \
+        		-out $DEST_PATH/private/$RADIUS_CERT \
+        		-days $CA_CERT_VALIDITY \
+        		-batch \
+        		-extensions xpserver_ext \
+        		-infiles $DEST_PATH/private/$RADIUS_REQ
+
+	   	sed -e "s/unique_subject\s*=\s*yes\s*/unique_subject = yes/" -i $DEST_PATH/index.txt.attr
+	    fi
+            dpkg --compare-versions $2 le 1.0-19
+            if [[ $? == 0 ]]; then
+		chmod 242 /home/snack/backups.git/*
+		sed\
+        		-e "/exec/c \\\texec /usr/sbin/in.tftpd --listen --user snack --address 0.0.0.0:69 --secure $TFTP_FOLDER -c -U 525"\
+        		-i /etc/init/tftpd-hpa.conf
+	    	sed\
+        		-e "s|\(TFTP_OPTIONS=\"\).*$|\1$TFTP_OPTIONS\"|" \
+        		-i /etc/default/tftpd-hpa
+	    fi
+	    dpkg --compare-versions $2 le 1.0-30
+	    if [[ $? == 0 ]]; then
+		echo "< 1.0-26"
+	    	DATABASEFILE=$USER_HOME/interface/app/Config/database.php
+		PASS=`grep password $DATABASEFILE | head -n 1 | cut -d'>' -f2 | cut -d"'" -f2`
+		echo "ALTER TABLE radacct MODIFY nasportid varchar(64) default NULL;" | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
+		openssl x509 -outform der -in $DEST_PATH/private/$CA_CERT -out $DEST_PATH/private/$CA_CERT_CER
+		
+		# Symlink for the interface
+		ln -s $DEST_PATH/private/$CA_CERT_CER $DEST_PATH/$CA_CERT_CER
+		chown $INTERFACE_USER: $DEST_PATH/$CA_CERT_CER
+		rsync -avr /home/snack/conf/cron.d /etc >> $OUT 2>>$LOG
+		echo 'update radcheck set value="Ethernet|Wireless-802.11" where value="Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
+		echo 'update radcheck set value="Async|Virtual|Ethernet|Wireless-802.11" where value="Async|Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
+		echo 'update radcheck set value="Async|Ethernet|Wireless-802.11" where value="Async|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
+		echo 'update radcheck set value="Virtual|Ethernet|Wireless-802.11" where value="Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
+		sed -e '0,/#\(\s*sql\)/s//\1/' -i $INNER_TUNNEL_VIRTUAL_SERVER >> $OUT 2>>$LOG
+		service cron restart
+		service freeradius restart
+ 	    fi
+	    service apache2 restart
+	fi
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
         # Do nothing
