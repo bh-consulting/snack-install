@@ -1,2 +1,5 @@
 0 */3	* * * 	root 	/home/snack/interface/tools/scriptCluster.sh
 */15 *  * * *   www-data    /home/snack/interface/app/Console/cake snack_check_updates
+0 23	* * * 	www-data    /home/snack/interface/app/Console/cake SnackSendReports
+#*/10 *  * * *   root    /home/snack/interface/tools/scriptWatchdog.sh
+59 23   * * 7   root    /home/snack/interface/tools/scriptLogsRotate.sh

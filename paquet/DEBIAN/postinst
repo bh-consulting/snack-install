@@ -62,38 +62,199 @@ STEP=1
 LAST_STEP=7
 DISPLAY_SLEEP=0.5
 
+function configradius {
+    echo "Configuration of freeradius"
+    # Setting the eap.conf file
+    # configuration du fichier eap.conf
+    # TLS
+    sed -e "/Read the 'users' file/ {N; s/\(.*\n\s*\)files/\1# files/; }" -i $INNER_TUNNEL_VIRTUAL_SERVER >> $OUT 2>>$LOG
+    sed -e '/Authorization Queries/ {N; s/\(.*\n\)\(\s*\)#\?sql/\1\2sql\n\n\2update control {\n\2\2EAP-Type := MD5-CHALLENGE\n\2}/;}' -i $INNER_TUNNEL_VIRTUAL_SERVER >> $OUT 2>>$LOG
+    #sed -e '0,/#\(\s*sql\)/s//\1/' -i $INNER_TUNNEL_VIRTUAL_SERVER >> $OUT 2>>$LOG
 
-function lessstrict_than_version {
-     VER=$1
-     VER2=$2
-     VERMAJ=`echo $VER | cut -d'.' -f1`
-     VERTMP=`echo $VER | cut -d'.' -f2`
-     VERMIN=`echo $VERTMP | cut -d'-' -f1`
-     VERREL=`echo $VERTMP | cut -d'-' -f2`
- 
-     VERMAJ2=`echo $VER2 | cut -d'.' -f1`
-     VERTMP=`echo $VER2 | cut -d'.' -f2`
-     VERMIN2=`echo $VERTMP | cut -d'-' -f1`
-     VERREL2=`echo $VERTMP | cut -d'-' -f2`
- 
- 
-     if [ "$VERMAJ" -eq "$VERMAJ2" ]; then
-         if [ "$VERMIN" -eq "$VERMIN2" ]; then
-             if [ "$VERREL" -eq "$VERREL2" ]; then
-                 return 0
-             elif [ "$VERREL" -lt "$VERREL2" ]; then
-                 return 1
-             fi
-         elif [ "$VERMIN" -lt "$VERMIN2" ]; then
-             return 1
-         fi
-     elif [ "$VERMAJ" -lt "$VERMAJ2" ]; then
-         return 1
-     fi
+    sed\
+            -e "/certdir =/i \\\t\t\tconfdir = $DEST_PATH"\
+            -e "/certdir =/c \\\t\t\tcertdir = \${confdir}"\
+            -e "/cadir =/c \\\t\t\tcadir = \${confdir}/private"\
+            -e "/private_key_password =/c \\\t\t\tprivate_key_password ="\
+            -e "/private_key_file =/c \\\t\t\tprivate_key_file = \${cadir}/$RADIUS_KEY"\
+            -e "/^\s*certificate_file =/c \\\t\t\tcertificate_file = \${cadir}/$RADIUS_CERT"\
+            -e "/^\s*CA_file =/c \\\t\t\tCA_file = \${cadir}/$CA_CERT"\
+            -e "/dh_file =/c \\\t\t\tdh_file = \${certdir}/dh"\
+            -e "/check_crl =/c \\\t\t\tcheck_crl = yes"\
+            -e "/^\s*#*CA_path =/c \\\t\t\tCA_path = \${certdir}/certs"\
+            -e "/^\s*#*\s*check_cert_cn =/c \\\t\t\tcheck_cert_cn = %{User-Name}"\
+	    -e "/copy_request_to_tunnel =/c \\\t\t\tcopy_request_to_tunnel = yes"\
+	    -e "/use_tunneled_reply =/c \\\t\t\tuse_tunneled_reply = yes"\
+            -i $EAP_CONF \
+    >> $OUT 2>>$LOG
+    sed -e 's/#\(\s*\$INCLUDE sql\.conf\)/\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+    sed -e 's/#\(\s*\$INCLUDE sql\/mysql\/counter.conf\)/\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+    sed -e 'N; s/\(#\s*clients\s*=\s*per_socket_clients.*\)\(}\)/\1\tvirtual_server = snack\n\2/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+    sed -e 's/\(\$INCLUDE clients\.conf\)/#\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+    sed -e 's/\(auth\s*=\).*/\1 yes/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+    sed -e 's/\(auth_badpass\s*=\).*/\1 yes/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+    
+    # Configuration de Radius pour intéragir avec la base de donnée
+    # Radius configuration in order to interact with our database
+    sed\
+	    -e "s/radpass/${PASSWORD_RADIUS}/"\
+	    -e "s/#\(readclients\)/\1/"\
+	    -i $SQL_CONF \
+    >> $OUT 2>>$LOG
+    grep accounting_start_query $SQL_CONF
+    if [ $? != 0 ]; then
+        sed "95i\ \taccounting_start_query = \"INSERT into \${acct_table1} (AcctSessionId, AcctUniqueId, UserName, Realm, NASIPAddress, NASPortId, NASPortType, AcctStartTime, AcctStopTime, AcctSessionTime, AcctAuthentic, ConnectInfo_start, ConnectInfo_stop, AcctInputOctets, AcctOutputOctets, CalledStationId, CallingStationId, AcctTerminateCause, ServiceType, FramedProtocol, FramedIPAddress, AcctStartDelay, AcctStopDelay) values('%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', '%{SQL-User-Name}', '%{Realm}', '%{NAS-IP-Address}', '%{NAS-Port-Id}', '%{NAS-Port-Type}', '%S', NULL, '0', '%{Acct-Authentic}', '%{Connect-Info}', '', '0', '0', '%{Called-Station-Id}', '%{Calling-Station-Id}', '', '%{Service-Type}', '%{Framed-Protocol}', '%{Framed-IP-Address}', '%{Acct-Delay-Time}', '0')\"" -i $SQL_CONF
+    fi
+        
+    # Activate syslog for freeradius
+    # Active Syslog pour Freeradius
+    sed\
+	    -e 's/\(destination\s*=\s*\).*$/\1syslog/'\
+	    -e 's/\(syslog_facility\s*=\s*\).*$/\1local2/'\
+	    -i $RADIUSD_CONF \
+    >> $OUT 2>>$LOG
 }
 
+function installmodules {
+    echo "Configuration of modules"
+    rsync -avr /home/snack/conf/* /etc >> $OUT 2>>$LOG
+    sed -e "s/\(\s*'level' => E_ALL \& ~E_DEPRECATED\),/\1 \& ~E_STRICT,/" -i /home/snack/interface/app/Config/core.php
+    ##########
+    # Apache #
+    ##########
 
-function install {
+    echo 0 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nVirtual servers management." \
+	    10 70 0
+    sleep $DISPLAY_SLEEP
+
+    # Apache configuration
+    # Configuraton du serveur Apache
+
+    {
+    sed \
+	    -e "s|INTERFACE_PATH|${USER_HOME}/interface|"\
+	    -i $APACHE_SNACK
+
+    rm -f ${APACHE_PATH}/sites-enabled/000-default
+    } >> $OUT 2>>$LOG
+
+    echo 30 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nEnable ssl and rewrite modules." \
+	    10 70 0
+
+    {
+    a2enmod ssl
+    a2enmod rewrite
+    } >> $OUT 2>>$LOG
+
+    echo 60 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nMysql access for radius." \
+	    10 70 0
+
+    sed \
+	    -e "s/\('password' =>\) '.*'/\1 '${PASSWORD_RADIUS}'/"\
+	    -i ${USER_HOME}/interface/app/Config/database.php \
+
+    >> $OUT 2>>$LOG
+
+    echo 90 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nAutomaticaly Setting IP" \
+	    10 70 0
+    {
+    IP=`ip a | grep eth. | grep '[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*' | head -1 | cut -d ' ' -f6 | cut -d '/' -f1`
+    if [[ ! -z "$IP" ]]
+    then
+    sed \
+	    -e "s/\('ipAddress' => '\)[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*/\1$IP/" \
+	    -i $USER_HOME/interface/app/Config/parameters.php
+    fi
+    } >> $OUT 2>>$LOG
+
+
+
+    echo 100 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nDone!" \
+	    10 70 0
+    sleep $DISPLAY_SLEEP
+
+    ##########
+    # Syslog #
+    ##########
+
+    echo 0 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring syslog for Radius..." \
+	    10 70 0
+    sleep $DISPLAY_SLEEP
+
+
+    echo 100 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring syslog for Radius...\nDone!" \
+	    10 70 0
+    sleep $DISPLAY_SLEEP
+
+    STEP=$(($STEP+1))
+}
+
+function restartservices {
+    echo 0 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nSyslog-ng" \
+	    10 70 0
+
+    service syslog-ng restart >> $OUT 2>>$LOG
+
+    echo 20 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nFreeradius" \
+	    10 70 0
+
+    service freeradius restart >> $OUT 2>>$LOG
+
+    echo 40 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nApache2" \
+	    10 70 0
+
+    service apache2 restart >> $OUT 2>>$LOG
+
+    echo 60 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nTftp" \
+	    10 70 0
+
+    {
+    sudo service tftpd-hpa stop
+    /usr/sbin/in.tftpd --listen --user snack --address 0.0.0.0:69 --secure $TFTP_FOLDER -c
+    } >> $OUT 2>>$LOG
+
+    echo 80 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nSnmptrapd" \
+	    10 70 0
+
+    {
+    snmptrapd
+    } >> $OUT 2>>$LOG
+
+    echo 100 | whiptail \
+	    --title "SNACK ${VERSION}" \
+	    --gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nDone!" \
+	    10 70 0
+    sleep $DISPLAY_SLEEP
+
+    STEP=$(($STEP+1))
+}
+
+function init {
+echo "Initialization of database"
 whiptail \
 	--title "SNACK ${VERSION}" \
 	--yes-button "Start" \
@@ -112,10 +273,10 @@ fi
 #########################################################################################################################################################
 # Copying of configuration files (sudoers, apache2, syslog-ng, freeradius) / Copie des fichiers configurations (sudoers, apache2, syslog-ng, freeradius)#
 #########################################################################################################################################################
-rsync -avr /home/snack/conf/* /etc >> $OUT 2>>$LOG
+
 cp /home/snack/interface/app/Config/parameters.php.default /home/snack/interface/app/Config/parameters.php
 cp /home/snack/interface/app/Config/database.php.default /home/snack/interface/app/Config/database.php
-chown www-data:www-data /home/snack/interface/app/Config/parameters.php
+
 
 echo 0 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -258,32 +419,20 @@ echo "INSERT INTO radcheck(UserName, Attribute, op, Value) VALUES ('admin', 'Cle
 echo "INSERT INTO raduser(UserName, Role) VALUES ('admin', 'root');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
 echo "INSERT INTO nas(nasname, shortname, secret) VALUES ('127.0.0.1', 'loop', 'loopsecret');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
 echo "INSERT INTO backups(nas,action) VALUES('127.0.0.1','boot');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
-
+htpasswd -b /home/snack/interface/app/Config/.htpasswd admin ${PASSWORD_RADIUS}
 echo 50 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring Mysql for Radius...\nConfigure Freeradius." \
 	10 70 0
 
-# Configuration de Radius pour intéragir avec la base de donnée
-# Radius configuration in order to interact with our database
 
-sed\
-	-e "s/radpass/${PASSWORD_RADIUS}/"\
-	-e "s/#\(readclients\)/\1/"\
-	-i $SQL_CONF \
->> $OUT 2>>$LOG
 
 echo 75 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring Mysql for Radius...\nConfigure Freeradius." \
 	10 70 0
 
-sed -e 's/#\(\s*\$INCLUDE sql\.conf\)/\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
-sed -e 's/#\(\s*\$INCLUDE sql\/mysql\/counter.conf\)/\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
-sed -e 'N; s/\(#\s*clients\s*=\s*per_socket_clients.*\)\(}\)/\1\tvirtual_server = snack\n\2/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
-sed -e 's/\(\$INCLUDE clients\.conf\)/#\1/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
-sed -e 's/\(auth\s*=\).*/\1 yes/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
-sed -e 's/\(auth_badpass\s*=\).*/\1 yes/' -i $RADIUSD_CONF >> $OUT 2>>$LOG
+
 
 read ADD <<STUFF
 rewrite_calling_station_id { \\\n\
@@ -418,22 +567,6 @@ openssl x509 \
 # Symlink for the interface
 ln -s $DEST_PATH/private/$CA_CERT $DEST_PATH/$CA_CERT
 ln -s $DEST_PATH/private/$CA_CERT_CER $DEST_PATH/$CA_CERT_CER
-chown $INTERFACE_USER: $DEST_PATH/$CA_CERT
-chown $INTERFACE_USER: $DEST_PATH/$CA_CERT_CER
-
-echo 30 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring certificates for Radius...\nSet permissions." \
-	10 70 0
-
-# Setting approriates permissions
-# Affectation des permissions
-
-{
-chown $INTERFACE_USER $DEST_PATH/private/$CA_KEY
-chmod $INTERFACE_ACCESS $DEST_PATH/private/$CA_KEY
-chmod $READ_ONLY $DEST_PATH/private/$CA_CERT
-} >> $OUT 2>>$LOG
 
 echo 35 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -467,15 +600,7 @@ echo 40 | whiptail \
 	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring certificates for Radius...\nSet permissions." \
 	10 70 0
 
-# Setting approriates permissions
-# Affectation des permissions
 
-{
-chown $RADIUS_USER $DEST_PATH/private/$RADIUS_KEY
-chown $RADIUS_USER $DEST_PATH/private/$RADIUS_CERT
-chmod $ONLY_RADIUS_ACCESS $DEST_PATH/private/$RADIUS_KEY
-chmod $ONLY_RADIUS_ACCESS $DEST_PATH/private/$RADIUS_CERT
-} >> $OUT 2>>$LOG
 
 echo 45 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -496,13 +621,6 @@ ln -s $DEST_PATH/private/$CA_CERT $DEST_PATH/certs/$HASH.0
 ln -s $DEST_PATH/crl/crl.pem $DEST_PATH/certs/$HASH.r0
 } >> $OUT 2>>$LOG
 
-# Setting approriates permissions
-# Affectation des permissions
-
-{
-chown $RADIUS_USER $DEST_PATH/crl/crl.pem
-chmod $INTERFACE_ACCESS $DEST_PATH/crl/crl.pem
-} >> $OUT 2>>$LOG
 
 echo 60 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -520,62 +638,10 @@ dd if=/dev/urandom of=$DEST_PATH/random count=2
 openssl dhparam -check -text -5 1024 -out $DEST_PATH/dh
 } >> $OUT 2>>$LOG
 
-# Setting approriates permissions
-# Affectation des permissions
-
-{
-chown $RADIUS_USER $DEST_PATH/random
-chown $RADIUS_USER $DEST_PATH/dh
-chmod $ONLY_RADIUS_ACCESS $DEST_PATH/random
-chmod $ONLY_RADIUS_ACCESS $DEST_PATH/dh
-} >> $OUT 2>>$LOG
-
-echo 70 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring certificates for Radius...\nConfigure Freeradius TLS authentication." \
-	10 70 0
-
-# Setting the eap.conf file
-# onfiguration du fichier eap.conf
-
-# TLS
-sed\
-    -e "/Read the 'users' file/ {N; s/\(.*\n\s*\)files/\1# files/; }"\
-    -e '0,/#\(\s*sql\)/s//\1/'\
-    -e '/Authorization Queries/ {N; s/\(.*\n\)\(\s*\)#\?sql/\1\2sql\n\n\2update control {\n\2\2EAP-Type := MD5-CHALLENGE\n\2}/;}'\
-	-i $INNER_TUNNEL_VIRTUAL_SERVER \
->> $OUT 2>>$LOG
-
-sed\
-        -e "/certdir =/i \\\t\t\tconfdir = $DEST_PATH"\
-        -e "/certdir =/c \\\t\t\tcertdir = \${confdir}"\
-        -e "/cadir =/c \\\t\t\tcadir = \${confdir}/private"\
-        -e "/private_key_password =/c \\\t\t\tprivate_key_password ="\
-        -e "/private_key_file =/c \\\t\t\tprivate_key_file = \${cadir}/$RADIUS_KEY"\
-        -e "/^\s*certificate_file =/c \\\t\t\tcertificate_file = \${cadir}/$RADIUS_CERT"\
-        -e "/^\s*CA_file =/c \\\t\t\tCA_file = \${cadir}/$CA_CERT"\
-        -e "/dh_file =/c \\\t\t\tdh_file = \${certdir}/dh"\
-        -e "/check_crl =/c \\\t\t\tcheck_crl = yes"\
-        -e "/^\s*#*CA_path =/c \\\t\t\tCA_path = \${certdir}/certs"\
-        -e "/^\s*#*\s*check_cert_cn =/c \\\t\t\tcheck_cert_cn = %{User-Name}"\
-	-e "/copy_request_to_tunnel =/c \\\t\t\tcopy_request_to_tunnel = yes"\
-	-e "/use_tunneled_reply =/c \\\t\t\tuse_tunneled_reply = yes"\
-        -i $EAP_CONF \
->> $OUT 2>>$LOG
-
 echo 80 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring certificates for Radius...\nImport scripts for the web interface." \
 	10 70 0
-
-
-# Setting approriates permissions
-# Affecter les permissions
-
-{
-chown -R $INTERFACE_USER $USER_HOME/scripts
-chmod -R $ONLY_INTERFACE_ACCESS $USER_HOME/scripts
-} >> $OUT 2>>$LOG
 
 echo 90 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -588,7 +654,6 @@ echo 90 | whiptail \
 {
 usermod -a -G snack $RADIUS_USER
 usermod -a -G snack $INTERFACE_USER
-chown -R :snack $USER_HOME
 } >> $OUT 2>>$LOG
 
 echo 100 | whiptail \
@@ -599,95 +664,7 @@ sleep $DISPLAY_SLEEP
 
 STEP=$(($STEP+1))
 
-##########
-# Apache #
-##########
 
-echo 0 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nVirtual servers management." \
-	10 70 0
-sleep $DISPLAY_SLEEP
-
-# Apache configuration
-# Configuraton du serveur Apache
-
-{
-sed \
-	-e "s|INTERFACE_PATH|${USER_HOME}/interface|"\
-	-i $APACHE_SNACK
-
-rm -f ${APACHE_PATH}/sites-enabled/000-default
-} >> $OUT 2>>$LOG
-
-echo 30 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nEnable ssl and rewrite modules." \
-	10 70 0
-
-{
-a2enmod ssl
-a2enmod rewrite
-} >> $OUT 2>>$LOG
-
-echo 60 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nMysql access for radius." \
-	10 70 0
-
-sed \
-	-e "s/\('password' =>\) '.*'/\1 '${PASSWORD_RADIUS}'/"\
-	-i ${USER_HOME}/interface/app/Config/database.php \
-
->> $OUT 2>>$LOG
-
-echo 90 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nAutomaticaly Setting IP" \
-	10 70 0
-{
-IP=`ip a | grep eth. | grep '[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*' | head -1 | cut -d ' ' -f6 | cut -d '/' -f1`
-if [[ ! -z "$IP" ]]
-then
-sed \
-	-e "s/\('ipAddress' => '\)[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*/\1$IP/" \
-	-i $USER_HOME/interface/app/Config/parameters.php
-fi
-} >> $OUT 2>>$LOG
-
-
-
-echo 100 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring apache for Radius...\nDone!" \
-	10 70 0
-sleep $DISPLAY_SLEEP
-
-##########
-# Syslog #
-##########
-
-echo 0 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring syslog for Radius..." \
-	10 70 0
-sleep $DISPLAY_SLEEP
-
-# Activate syslog for freeradius
-# Active Syslog pour Freeradius
-sed\
-	-e 's/\(destination\s*=\s*\).*$/\1syslog/'\
-	-e 's/\(syslog_facility\s*=\s*\).*$/\1local2/'\
-	-i $RADIUSD_CONF \
->> $OUT 2>>$LOG
-
-echo 100 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring syslog for Radius...\nDone!" \
-	10 70 0
-sleep $DISPLAY_SLEEP
-
-STEP=$(($STEP+1))
 
 #####################################################
 #Configuration backups/Sauvegarde des configurations#
@@ -699,22 +676,12 @@ echo 0 | whiptail \
 	10 70 0
 {
 mkdir -p $TFTP_FOLDER
-chown snack:snack $TFTP_FOLDER
-chmod 0770 $TFTP_FOLDER
 } >> $OUT 2>>$LOG
 
 echo 30 | whiptail \
 	--title "SNACK ${VERSION}" \
 	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Configuring backups system...\nSet scripts permissions" \
 	10 70 0
-{
-chmod +x $USER_HOME/scripts
-chown snmp:snack $BACKUP_CREATE_SCRIPT
-chmod 0550 $BACKUP_CREATE_SCRIPT
-chown snmp:snack $BACKUP_TRAPS_SCRIPT
-chmod 0550 $BACKUP_TRAPS_SCRIPT
-} >> $OUT 2>>$LOG
-
 
 echo 60 | whiptail \
 	--title "SNACK ${VERSION}" \
@@ -771,54 +738,6 @@ echo 90 | whiptail \
 
 STEP=$(($STEP+1))
 
-echo 0 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nSyslog-ng" \
-	10 70 0
-
-service syslog-ng restart >> $OUT 2>>$LOG
-
-echo 20 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nFreeradius" \
-	10 70 0
-
-service freeradius restart >> $OUT 2>>$LOG
-
-echo 40 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nApache2" \
-	10 70 0
-
-service apache2 restart >> $OUT 2>>$LOG
-
-echo 60 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nTftp" \
-	10 70 0
-
-{
-sudo service tftpd-hpa stop
-/usr/sbin/in.tftpd --listen --user snack --address 0.0.0.0:69 --secure $TFTP_FOLDER -c
-} >> $OUT 2>>$LOG
-
-echo 80 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nSnmptrapd" \
-	10 70 0
-
-{
-snmptrapd
-} >> $OUT 2>>$LOG
-
-echo 100 | whiptail \
-	--title "SNACK ${VERSION}" \
-	--gauge "\n\nStep #${STEP}/${LAST_STEP}: Restarting services...\nDone!" \
-	10 70 0
-sleep $DISPLAY_SLEEP
-
-STEP=$(($STEP+1))
-
 # Delete temporary directory
 # Suppression du dossier temporaire
 
@@ -836,15 +755,22 @@ whiptail \
 	--msgbox "\n\nInstallation done!" \
 	10 70
 
-exit 0
 }
 
 case $1 in
     configure)
         if [ "$2" == ""  ]; then
             echo "INSTALLATION"
-            install
-        else
+            init
+            configradius
+            installmodules
+            $USER_HOME/interface/tools/fixperms.sh
+            restartservices
+        else          
+            configradius
+            installmodules
+            $USER_HOME/interface/tools/fixperms.sh
+            restartservices
             echo "UPGRADE from $2"
 	    rsync -avr /home/snack/conf/sudoers.d /etc >> $OUT 2>>$LOG
             cp /root/backup-snack/parameters.php /home/snack/interface/app/Config
@@ -874,7 +800,7 @@ case $1 in
         		-e "s|\(TFTP_OPTIONS=\"\).*$|\1$TFTP_OPTIONS\"|" \
         		-i /etc/default/tftpd-hpa
 	    fi
-	    dpkg --compare-versions $2 le 1.0-30
+	    dpkg --compare-versions $2 le 1.0-26
 	    if [[ $? == 0 ]]; then
 		echo "< 1.0-26"
 	    	DATABASEFILE=$USER_HOME/interface/app/Config/database.php
@@ -884,16 +810,49 @@ case $1 in
 		
 		# Symlink for the interface
 		ln -s $DEST_PATH/private/$CA_CERT_CER $DEST_PATH/$CA_CERT_CER
-		chown $INTERFACE_USER: $DEST_PATH/$CA_CERT_CER
+		
 		rsync -avr /home/snack/conf/cron.d /etc >> $OUT 2>>$LOG
 		echo 'update radcheck set value="Ethernet|Wireless-802.11" where value="Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
 		echo 'update radcheck set value="Async|Virtual|Ethernet|Wireless-802.11" where value="Async|Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
 		echo 'update radcheck set value="Async|Ethernet|Wireless-802.11" where value="Async|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
 		echo 'update radcheck set value="Virtual|Ethernet|Wireless-802.11" where value="Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
 		sed -e '0,/#\(\s*sql\)/s//\1/' -i $INNER_TUNNEL_VIRTUAL_SERVER >> $OUT 2>>$LOG
+		
 		service cron restart
 		service freeradius restart
  	    fi
+	    dpkg --compare-versions $2 le 1.0-27
+	    if [[ $? == 0 ]]; then
+                echo "< 1.0-27"
+		DATABASEFILE=$USER_HOME/interface/app/Config/database.php
+                PASS=`grep password $DATABASEFILE | head -n 1 | cut -d'>' -f2 | cut -d"'" -f2`
+	    	users=`mysql -uradius -p${PASS} ${DATABASE} -N -B -e "select username from raduser where role='root';" | awk -F " " '{ print $1 }'`
+		for user in $users
+		do
+    		    password=`mysql -uradius -p${PASS} ${DATABASE} -N -B -e "select value from radcheck where username='$user' and attribute='Cleartext-Password';"`
+         	    htpasswd -b /home/snack/interface/app/Config/.htpasswd $user $password
+		done
+	    fi
+	    dpkg --compare-versions $2 le 1.0-30
+	    if [[ $? == 0 ]]; then
+		sed -e '0,/#\(\s*sql\)/s//\1/' -i $INNER_TUNNEL_VIRTUAL_SERVER >> $OUT 2>>$LOG
+	    fi
+	    dpkg --compare-versions $2 le 1.0-32
+            if [[ $? == 0 ]]; then
+	    	sed "95i\ \taccounting_start_query = \"INSERT into \${acct_table1} (AcctSessionId, AcctUniqueId, UserName, Realm, NASIPAddress, NASPortId, NASPortType, AcctStartTime, AcctStopTime, AcctSessionTime, AcctAuthentic, ConnectInfo_start, ConnectInfo_stop, AcctInputOctets, AcctOutputOctets, CalledStationId, CallingStationId, AcctTerminateCause, ServiceType, FramedProtocol, FramedIPAddress, AcctStartDelay, AcctStopDelay) values('%{Acct-Session-Id}', '%{Acct-Unique-Session-Id}', '%{SQL-User-Name}', '%{Realm}', '%{NAS-IP-Address}', '%{NAS-Port-Id}', '%{NAS-Port-Type}', '%S', NULL, '0', '%{Acct-Authentic}', '%{Connect-Info}', '', '0', '0', '%{Called-Station-Id}', '%{Calling-Station-Id}', '', '%{Service-Type}', '%{Framed-Protocol}', '%{Framed-IP-Address}', '%{Acct-Delay-Time}', '0')\"" -i $SQL_CONF
+	    service freeradius restart
+	    fi
+	    # Ajout windows/ad
+	    #dpkg --compare-versions $2 le 1.0-36
+            #if [[ $? == 0 ]]; then
+	    #	echo "ALTER TABLE raduser ADD is_windowsad boolean default '0';" | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
+	    #fi
+	    dpkg --compare-versions $2 le 1.0-36
+	    if [[ $? == 0 ]]; then
+		sed -e "s/\(\s*'level' => E_ALL \& ~E_DEPRECATED\),/\1 \& ~E_STRICT,/" -i /home/snack/interface/app/Config/core.php
+		rsync -avr /home/snack/conf/syslog-ng/conf.d/00snack /etc/syslog-ng/conf.d
+		service syslog-ng restart >> $OUT 2>>$LOG
+	    fi
 	    service apache2 restart
 	fi
         ;;
