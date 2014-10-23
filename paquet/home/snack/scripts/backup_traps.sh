@@ -90,7 +90,7 @@ elif [[\
         echo "Receiving configuration tftp-DONE" >> $DEBUGOUT
     fi
     cd ~snack/backups.git/
-
+    sed -i '/^! [Last|NVRAM]/d' $NAS_IP_ADDRESS
     /usr/bin/git add $NAS_IP_ADDRESS
     /usr/bin/git commit -m AUTO-COMMIT $NAS_IP_ADDRESS
 
