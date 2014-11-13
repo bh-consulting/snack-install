@@ -3,7 +3,7 @@ Version: 1.0-3
 Section: base
 Priority: optional
 Architecture: all
-Depends: bash, openssl, freeradius, freeradius-utils, freeradius-mysql, mysql-server, php5, php5-mysql, php5-snmp, syslog-ng, syslog-ng-mod-sql, libdbd-mysql, snmp, snmpd, tftpd-hpa, git, unzip, wget, whiptail, sudo, tig, php5-curl, libnl1, bzip2
+Depends: bash, openssl, freeradius, freeradius-utils, freeradius-mysql, mysql-server, php5, php5-mysql, php5-snmp, syslog-ng, syslog-ng-mod-sql, libdbd-mysql, snmp, snmpd, tftpd-hpa, git, unzip, wget, whiptail, sudo, tig, php5-curl, libnl1, bzip2, samba, samba-common, winbind, krb5-config, libexpect-perl, nagios3
 Maintainer: SNACK Team <tech@bh-consulting.net>
 Description: Secure Network Access Control for Kids
 

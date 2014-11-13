@@ -113,6 +113,17 @@ function configradius {
 	    -e 's/\(syslog_facility\s*=\s*\).*$/\1local2/'\
 	    -i $RADIUSD_CONF \
     >> $OUT 2>>$LOG
+
+    # Freeradius for Active Directory
+    # Freeradius Module 
+    sed -e 's/\(\s*program\s*=\s*"\)\/path\/to\(.*--domain=\)MYDOMAIN/\1\/usr\/bin\2$DOMAIN/' -i /etc/freeradius/modules/ntlm_auth
+    sed -e 's/#\(\s*use_mppe\s*=\s*\)no/\1yes/' -i /etc/freeradius/modules/mschap
+    sed -e 's/#\(\s*require_encryption\s*=\s*\)yes/\1no/' -i /etc/freeradius/modules/mschap
+    sed -e 's/#\(\s*require_strong\s*=\s*\)yes/\1no/' -i /etc/freeradius/modules/mschap
+    sed -e 's/#\(\s*with_ntdomain_hack\s*=\s*\)no/\1no/' -i /etc/freeradius/modules/mschap
+    sed -e 's/#\(\s*ntlm_auth\s*=\s*"\)\/path\/to/\1\/usr\/bin/' -i /etc/freeradius/modules/mschap
+    # Freeradius inner-tunnel
+    sed -e '0,/\(\t\)mschap\s*/s//\1sql\n\1mschap\n\1if (control:Cleartext-Password) {\n\1\tupdate control {\n\1\t\tMS-CHAP-Use-NTLM-Auth = No\n\1\t}\n\1}\n/' -i /etc/freeradius/sites-enabled/inner-tunnel
 }
 
 function installmodules {
@@ -852,6 +863,13 @@ case $1 in
 		sed -e "s/\(\s*'level' => E_ALL \& ~E_DEPRECATED\),/\1 \& ~E_STRICT,/" -i /home/snack/interface/app/Config/core.php
 		rsync -avr /home/snack/conf/syslog-ng/conf.d/00snack /etc/syslog-ng/conf.d
 		service syslog-ng restart >> $OUT 2>>$LOG
+	    fi
+	    dpkg --compare-versions $2 le 1.0-62
+	    if [[ $? == 0 ]]; then
+		echo "< 1.0-62"
+                DATABASEFILE=$USER_HOME/interface/app/Config/database.php
+                PASS=`grep password $DATABASEFILE | head -n 1 | cut -d'>' -f2 | cut -d"'" -f2`
+                echo "ALTER TABLE raduser ADD is_windowsad boolean default '0';" | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
 	    fi
 	    service apache2 restart
 	fi
