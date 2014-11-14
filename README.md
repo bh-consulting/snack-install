@@ -1,14 +1,7 @@
 snack-install
 =============
-Pour Debian :
-apt-get install git whiptail make sudo unzip wget
+Pour Debian/Ubuntu :
 
-Pour Ubuntu
-apt-get install git make wget unzip
-
-wget https://github.com/bh-consulting/snack-install/archive/master.zip
-
-make 
-
+make stable
 make install
 
