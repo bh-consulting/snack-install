@@ -12,7 +12,7 @@ all: clean
 	sudo ./tools/scriptVersion.sh
 
 install:
-	sudo dpkg -i snack.deb || (sudo apt-get update && sudo apt-get -y --force-yes -f install)
+	sudo dpkg -i snack_*.deb || (sudo apt-get update && sudo apt-get -y --force-yes -f install)
 
 clean:
 	sudo rm -fr paquet_deb snack*.deb

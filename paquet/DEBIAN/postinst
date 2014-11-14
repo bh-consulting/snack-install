@@ -780,13 +780,13 @@ case $1 in
         else          
             configradius
             installmodules
-            $USER_HOME/interface/tools/fixperms.sh
             restartservices
             echo "UPGRADE from $2"
 	    rsync -avr /home/snack/conf/sudoers.d /etc >> $OUT 2>>$LOG
             cp /root/backup-snack/parameters.php /home/snack/interface/app/Config
             cp /root/backup-snack/database.php /home/snack/interface/app/Config
        	    rm -rf /root/backup-snack
+	    $USER_HOME/interface/tools/fixperms.sh
 	    dpkg --compare-versions $2 le 1.0-9
 	    if [[ $? == 0 ]]; then
 	        sed -e "s/unique_subject\s*=\s*yes\s*/unique_subject = no/" -i $DEST_PATH/index.txt.attr
