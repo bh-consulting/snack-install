@@ -148,6 +148,14 @@ CREATE TABLE radius.nas (
   server varchar(64),
   community varchar(50),
   description varchar(200) DEFAULT 'RADIUS Client',
+  version varchar(255),
+  image varchar(255),
+  serialnumber varchar(255),
+  model varchar(255),
+  login varchar(255),
+  password varchar(255),
+  enablepassword varchar(255),
+  backuptype varchar(255),
   PRIMARY KEY (id),
   KEY nasname (nasname)
 );

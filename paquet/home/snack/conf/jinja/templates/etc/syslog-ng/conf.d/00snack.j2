@@ -3,9 +3,10 @@ source s_net { udp(); };
 filter f_freeradius { facility(local2); };
 filter f_snack { facility(local4); };
 
-destination d_snack { file("/home/snack/logs/snacklog" template("$ISODATE $HOST $PROGRAM: [$FACILITY.$PRIORITY] $MSG\n") owner("root") group("snack") perm(0640)); };
+destination d_snack { file("/home/{{projectname}}/logs/{{projectname}}log" template("$ISODATE $HOST $PROGRAM: [$FACILITY.$PRIORITY] $MSG\n") owner("root") group("snack") perm(0640)); };
 
 log { source(s_src); filter(f_freeradius); destination(d_snack); };
 log { source(s_src); filter(f_snack); destination(d_snack); };
 log { source(s_net); destination(d_snack); };
+
 

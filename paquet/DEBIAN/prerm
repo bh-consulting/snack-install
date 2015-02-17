@@ -3,9 +3,10 @@ case $1 in
     upgrade)
         echo "UPGRADE to $2"
         /home/snack/interface/tools/scriptSnackExport.sh
-	mkdir /root/backup-snack
+	    mkdir /root/backup-snack
         cp /home/snack/interface/app/Config/database.php /root/backup-snack
         cp /home/snack/interface/app/Config/parameters.php /root/backup-snack
+        cp /home/snack/interface/app/Config/core.php /root/backup-snack
         #MYSQLPASSWORD=`grep "password" /home/snack/interface/app/Config/database.php | head -n 1 | cut -d"'" -f4`
         #mysqldump -u radius --password=$MYSQLPASSWORD radius > /tmp/backup-snack/snack-`date "+%Y%m%d"`.sql
         ;;

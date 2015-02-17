@@ -1,7 +1,8 @@
-server snack {
+server {{projectname}} {
 	authorize {
         rewrite_calling_station_id
 		preprocess
+		IPASS
 		suffix
 		logintime
 
@@ -33,6 +34,7 @@ server snack {
 		}
 		preprocess
 		acct_unique
+		IPASS
 		suffix
 	}
 

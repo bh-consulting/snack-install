@@ -1,0 +1,34 @@
+#!/bin/bash
+set -e
+. /usr/share/debconf/confmodule
+
+if [ "$1" = "configure" ] && [ -z "$2" ] || [ "$1" = "reconfigure" ]; then
+  while :; do
+    RET=""
+    db_input high snack/password || true
+    db_go
+    db_get snack/password
+    # if password isn't empty we ask for password verification
+    if [ -z "$RET" ]; then
+        db_fset snack/password seen false
+        db_fset snack/password_again seen false
+        break
+    fi
+    PASSWORD_RADIUS=$RET
+    db_input high snack/password_again || true
+    db_go
+    db_get snack/password_again
+    if [ "$RET" == "$PASSWORD_RADIUS" ]; then
+        db_input high snack/ca_common_name || true
+        db_go
+	db_input high snack/sqlpassword || true
+        db_go
+      break
+    fi
+    db_fset snack/password_mismatch seen false
+    db_input critical snack/password_mismatch
+    db_set snack/password ""
+    db_set snack/password_again ""
+    db_go
+  done
+fi

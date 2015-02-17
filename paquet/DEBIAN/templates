@@ -1,0 +1,31 @@
+Template: snack/sqlpassword
+Type: password
+Default:
+Description: What is the MySQL password for 'ROOT' user?
+
+Template: snack/db_exists
+Type: boolean
+Default:
+Description: Database exists!
+ Do you want to override it ?
+
+Template: snack/password
+Type: password
+Default:
+Description: Please, define the password for 'ADMIN' user:
+
+Template: snack/password_again
+Type: password
+Default:
+Description: Please, re-enter the password for 'ADMIN' user:
+
+Template: snack/password_mismatch
+Type: note
+Description: Password input error
+ The two passwords you entered were not the same. Please try again.
+
+Template: snack/ca_common_name
+Type: string
+Default:
+Description: Enter the name of the client (CA common name):
+
