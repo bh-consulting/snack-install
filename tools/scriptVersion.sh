@@ -4,7 +4,7 @@ if [ $# -lt 2 ]; then
 fi
 release=$1
 echo $release
-VERSION=`ls /home/www/debs/$release/snack_* | cut -d"_" -f2 | cut -d"_" -f1`
+VERSION=`ls /home/www/$release/snack_* | cut -d"_" -f2 | cut -d"_" -f1`
 REV=`echo $VERSION | cut -d"-" -f2`
 RAC=`echo $VERSION | cut -d"-" -f1`
 if [[ "$REV" == "$VERSION" ]]; then
@@ -26,7 +26,7 @@ fi
 sed -e "s/Version: .*/Version: $NEWVERSION/" -i paquet_deb/DEBIAN/control
 echo $NEWVERSION > paquet_deb/home/snack/interface/app/VERSION.txt
 dpkg-deb --build paquet_deb "snack_"$NEWVERSION"_"$release"_deb7u1_all.deb"
-mv /home/www/debs/$release/snack_*.deb /home/www/debs/archives
-cp "snack_"$NEWVERSION"_"$release"_deb7u1_all.deb" /home/www/debs/$release
-cd /home/www/debs && ./scriptRepo.sh
+mv /home/www/$release/snack_*.deb /home/www/archives
+cp "snack_"$NEWVERSION"_"$release"_deb7u1_all.deb" /home/www/$release
+./tools/scriptRepo.sh
 

@@ -27,8 +27,8 @@ backup() {
             $SCRPATH/telnet.pl $host $login $pass $enablepassword "show run" > $GITPATH/$host
         fi
     fi
-    chown -R snack:snack $GITPATH
-    chmod -R 770 $GITPATH
+    #chown -R snack:snack $GITPATH
+    #chmod -R 770 $GITPATH
     if [[ "$res" == "0" ]]; then
         result=$( sed -e '/^\s*$/d' $GITPATH/$host | grep "^[^c|^C]" | tail -1)
         #echo $result

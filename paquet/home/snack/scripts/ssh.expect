@@ -2,7 +2,7 @@
  
 #Usage ssh.expect <host> <ssh user> <ssh password>
  
-set timeout 60
+set timeout 15
  
 spawn ssh [lindex $argv 1]@[lindex $argv 0] "[lindex $argv 4]"
  

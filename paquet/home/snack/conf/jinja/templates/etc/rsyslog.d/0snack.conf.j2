@@ -1,0 +1,13 @@
+$FileOwner snack
+$FileGroup snack
+$FileCreateMode 0644
+$DirCreateMode 0755
+
+$ModLoad imudp
+$UDPServerRun 514
+$AllowedSender UDP, 127.0.0.1, *
+
+$template templatesnack,"%TIMESTAMP:1:19:date-rfc3339%%TIMESTAMP:27:32:date-rfc3339% %HOSTNAME% %syslogtag% [%syslogfacility-text%.%syslogpriority-text%] %msg%\n"
+*.* /home/{{projectname}}/logs/{{projectname}}log;templatesnack
+local2.* /home/{{projectname}}/logs/{{projectname}}log;templatesnack
+

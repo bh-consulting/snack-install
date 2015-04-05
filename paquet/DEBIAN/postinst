@@ -67,8 +67,8 @@ function installmodules {
 }
 
 function restartservices {
-    echo "Restarting Syslog-ng..."
-    service syslog-ng restart
+    echo "Restarting Rsyslog..."
+    service rsyslog restart
     echo "Restarting Freeradius..."
     service freeradius restart
     echo "Restarting Apache2..."
@@ -83,15 +83,15 @@ function restartservices {
 
 function createFilesfromTemplates {
     VARFILE="$USER_HOME/conf/jinja/var.yml"
-    echo "projectname: snack" > $VARFILE
-    echo "username: radius" >> $VARFILE
-    echo "password: ${PASSWORD_RADIUS}" >> $VARFILE
-    echo "certdays: 3650" >> $VARFILE
+    echo "projectname: 'snack'" > $VARFILE
+    echo "username: 'radius'" >> $VARFILE
+    echo "password: '${PASSWORD_RADIUS}'" >> $VARFILE
+    echo "certdays: '3650'" >> $VARFILE
     IP=`ip a | grep eth. | grep '[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*' | head -1 | cut -d ' ' -f6 | cut -d '/' -f1`
     if [[ ! -z "$IP" ]]; then
-        echo "ipaddr: $IP" >> $VARFILE
+        echo "ipaddr: '$IP'" >> $VARFILE
     fi
-    echo "clientname: ${CLIENTNAME}" >> $VARFILE
+    echo "clientname: '${CLIENTNAME}'" >> $VARFILE
     cd $USER_HOME/conf/jinja && python config.py >> $OUT 2>>$LOG
     datetime=$(date +%Y%m%d-%H:%M)
     mkdir $(pwd)/backup/$datetime
@@ -167,7 +167,7 @@ function init {
     ############################
     echo "Configuring Freeradius"
     createFilesfromTemplates
-    key=$(openssl rand -base64 22)
+    key=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c22)
     sed -e "s/'Security\.snackkey',.*/'Security\.snackkey', '$key');/" -i /home/snack/interface/app/Config/core.php.default
     cp /home/snack/interface/app/Config/parameters.php.default /home/snack/interface/app/Config/parameters.php
     cp /home/snack/interface/app/Config/database.php.default /home/snack/interface/app/Config/database.php
@@ -349,6 +349,11 @@ case $1 in
 	            echo "ALTER TABLE nas ADD enablepassword varchar(255) default '';" | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG || true
 	            echo "ALTER TABLE nas ADD backuptype varchar(255) default '';" | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG || true
 	        fi
+            if dpkg --compare-versions "$2" le 1.0-88; then
+                key=$(openssl rand -base64 22)
+                sed -e "s/'Security\.snackkey',.*/'Security\.snackkey', '$key');/" -i /home/snack/interface/app/Config/core.php.default
+                cp /home/snack/interface/app/Config/core.php.default /home/snack/interface/app/Config/core.php
+            fi
 	        service apache2 restart
 	    fi
 	    exit 0
