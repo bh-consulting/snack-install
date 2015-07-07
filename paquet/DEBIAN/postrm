@@ -5,10 +5,11 @@ case $1 in
 	deluser snack
 	groupdel snack
         MYSQLPASSWORD=`grep "password" /home/snack/interface/app/Config/database.php | head -n 1 | cut -d"'" -f4`
-        echo "DROP DATABASE radius;" | mysql -uroot --password=$MYSQLPASSWORD
+        echo "DROP DATABASE radius;" | mysql -u radius --password=$MYSQLPASSWORD
 	rm -rf /home/snack
 	cat /etc/snmp/snmptrapd.conf | head -n -4 > /etc/snmp/snmptrapd.conf.2
 	mv /etc/snmp/snmptrapd.conf.2 /etc/snmp/snmptrapd.conf
+	echo PURGE | debconf-communicate snack
 	;;
     upgrade)
 	echo "postrm upgrade"

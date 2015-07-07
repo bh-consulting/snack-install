@@ -58,7 +58,7 @@ authorize {
 	#  the mschap module for authentication.
 	sql
 	mschap
-	if (control:Cleartext-Password) {
+	if (control:Cleartext-Password || control:NT-Password) {
 	    update control {
 		MS-CHAP-Use-NTLM-Auth = No
 	    }
@@ -95,7 +95,7 @@ authorize {
 	#  it difficult to bill people for their network activity.
 	#
 	suffix
-#	ntdomain
+	ntdomain
 
 	#
 	#  The "suffix" module takes care of stripping the domain

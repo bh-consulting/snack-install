@@ -17,22 +17,22 @@ backup() {
     res=$(nc -vnz -w 5 $host 22 >/dev/null 2>/dev/null; echo $?)
     if [[ "$res" == "0" ]]; then
         backuptype="ssh"
-        $SCRPATH/ssh.expect $host $login $pass $enablepassword "show run" > /tmp/$host
-        tail -n +3 /tmp/$host > $GITPATH/$host
-        rm /tmp/$host
+        $SCRPATH/ssh.expect $host $login $pass $enablepassword "show run" | tail -n +3 > /tmp/$host
+        #tail -n +3 /tmp/$host > $GITPATH/$host
     else
         res=$(nc -vnz -w 5 $host 23 >/dev/null 2>/dev/null; echo $?)
         if [[ "$res" == "0" ]]; then
             backuptype="telnet"
-            $SCRPATH/telnet.pl $host $login $pass $enablepassword "show run" > $GITPATH/$host
+            $SCRPATH/telnet.pl $host $login $pass $enablepassword "show run" > /tmp/$host
         fi
     fi
     #chown -R snack:snack $GITPATH
     #chmod -R 770 $GITPATH
     if [[ "$res" == "0" ]]; then
-        result=$( sed -e '/^\s*$/d' $GITPATH/$host | grep "^[^c|^C]" | tail -1)
+        result=$( sed -e '/^\s*$/d' /tmp/$host | grep "^[^c|^C]" | tail -1)
         #echo $result
         if [[ $result =~ "end" ]]; then
+	    mv /tmp/$host $GITPATH/$host
             cd $GITPATH
             sed -i '/^! [Last|NVRAM]/d' $host
             /usr/bin/git add $host

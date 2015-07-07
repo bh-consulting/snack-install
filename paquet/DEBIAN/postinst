@@ -29,7 +29,8 @@ RADIUS_KEY=radius_key.pem
 RADIUS_REQ=radius_req.pem
 RADIUS_CERT=radius_cert.pem
 
-TFTP_FOLDER=$USER_HOME/backups.git
+BACKUP_FOLDER=$USER_HOME/backups.git
+TFTP_FOLDER=$USER_HOME/tftp
 TFTP_OPTIONS="--secure -c -U 525"
 
 DATABASEFILE=$USER_HOME/interface/app/Config/database.php
@@ -37,6 +38,92 @@ DATABASEFILE=$USER_HOME/interface/app/Config/database.php
 set -e
 . /usr/share/debconf/confmodule
 
+function convertsnackusers {
+    PASS=`grep password $DATABASEFILE | head -n 1 | cut -d'>' -f2 | cut -d"'" -f2`
+    mysql -uradius -p${PASS} radius -e "CREATE TABLE snackuser (\
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,\
+        username VARCHAR(50),\
+        password VARCHAR(255),\
+        role VARCHAR(20),\
+        created DATETIME DEFAULT NULL,\
+        modified DATETIME DEFAULT NULL\
+    );"
+    salt=$(grep "Security.salt" /home/snack/interface/app/Config/core.php | cut -d"'" -f4)
+    users=$(mysql -uradius -p${PASS} radius -N -B -e "select username from raduser where role in ('root','admin','tech');")
+    sqldate=$(date "+%Y-%m-%d %H:%M:%S")
+    for user in $users
+    do
+        echo "insert $user"
+        role=$(mysql -uradius -p${PASS} radius -N -B -e "select role from raduser where username='$user';")
+        password=$(mysql -uradius -p${PASS} radius -N -B -e "select value from radcheck where username='$user' and attribute='Cleartext-Password';")
+        cryptpass=$(echo -n "$salt$password" | sha1sum | awk '{print $1}')
+        mysql -uradius -p${PASS} radius -e "INSERT INTO snackuser(username, password, role, created) VALUES ('$user', '$cryptpass', '$role', '$sqldate');"
+	mysql -uradius -p${PASS} radius -e "DELETE FROM raduser WHERE username='$user';"
+	mysql -uradius -p${PASS} radius -e "DELETE FROM radcheck WHERE username='$user';"
+    done
+}
+
+function installelasticsearch {
+    /usr/sbin/td-agent-gem install fluent-plugin-record-reformer
+    /usr/sbin/td-agent-gem install fluent-plugin-elasticsearch
+    pip install elasticsearch-curator
+    mv /var/lib/elasticsearch /home/snack
+    chown -R elasticsearch:elasticsearch /var/log/elasticsearch
+    chown -R elasticsearch:elasticsearch /home/snack/elasticsearch
+    service td-agent restart
+    sudo update-rc.d elasticsearch defaults 95 10
+    /usr/share/elasticsearch/bin/plugin -install mobz/elasticsearch-head
+    service elasticsearch restart
+    service rsyslog restart
+    netstat -ltn | grep 9200 > /dev/null
+    x=1
+    while [ $x -le 50 ]
+    do
+    	echo "Wait elasticsearch-head ..."
+    	netstat -ltn | grep 9200 > /dev/null
+   	if [[ $? == 0 ]]; then
+            break
+        fi
+        x=$(( $x + 1 ))
+        sleep 1
+    done
+    curl -XPUT localhost:9200/_template/template_1 -d '
+{
+    "template" : "logstash*",
+    "settings" : {
+        "number_of_shards" : 1
+    },
+    "mappings" : {
+        "fluentd": {
+        "properties": {
+          "@timestamp": {
+            "type": "date",
+            "format": "dateOptionalTime"
+          },
+          "facility": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string",
+            "index": "not_analyzed"
+          },
+          "ident": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          }
+        }
+      }
+    }
+}'
+}
 
 function confignagios {
     sed -e "s/<DirectoryMatch \(.*\)/<DirectoryMatch \(\/usr\/lib\/cgi-bin\/nagios3\)>/" -i /etc/apache2/conf.d/nagios3.conf
@@ -67,12 +154,14 @@ function installmodules {
 }
 
 function restartservices {
+    echo "Restarting elasticsearch..."
+    service elasticsearch restart
     echo "Restarting Rsyslog..."
     service rsyslog restart
     echo "Restarting Freeradius..."
     service freeradius restart
-    echo "Restarting Apache2..."
-    service apache2 restart
+    #echo "Restarting Apache2..."
+    #service apache2 restart
     echo "Restarting Tftpd..."
     sudo service tftpd-hpa stop
     /usr/sbin/in.tftpd --listen --user snack --address 0.0.0.0:69 --secure $TFTP_FOLDER -c
@@ -151,8 +240,14 @@ function init {
     done
     mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} < $USER_HOME/conf/sql/schema.sql >> $OUT 2>>$LOG
 
-    echo "INSERT INTO radcheck(UserName, Attribute, op, Value) VALUES ('admin', 'Cleartext-Password', ':=', '${PASSWORD_RADIUS}');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
-    echo "INSERT INTO raduser(UserName, Role) VALUES ('admin', 'root');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
+    echo "Generate Salt..."
+    key=$(makepasswd --chars 40)
+    #key=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c40)
+    echo $key
+    sed -e "s/'Security\.salt',.*/'Security\.salt', '$key');/" -i /home/snack/interface/app/Config/core.php.default
+    cryptpass=$(echo -n "$key${PASSWORD_RADIUS}" | sha1sum | awk '{print $1}')
+    sqldate=$(date "+%Y-%m-%d %H:%M:%S")
+    echo "INSERT INTO snackuser(username, password, role, created) VALUES ('admin', '$cryptpass', 'root', '$sqldate');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
     echo "INSERT INTO nas(nasname, shortname, secret) VALUES ('127.0.0.1', 'loop', 'loopsecret');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
     echo "INSERT INTO backups(nas,action) VALUES('127.0.0.1','boot');" | mysql -uroot -p${PASSWORD_DB_ROOT} ${DATABASE} >> $OUT 2>>$LOG
 
@@ -167,7 +262,8 @@ function init {
     ############################
     echo "Configuring Freeradius"
     createFilesfromTemplates
-    key=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c22)
+    #key=$(< /dev/urandom tr -dc A-Za-z0-9 | head -c32)
+    key=$(makepasswd --chars 32)
     sed -e "s/'Security\.snackkey',.*/'Security\.snackkey', '$key');/" -i /home/snack/interface/app/Config/core.php.default
     cp /home/snack/interface/app/Config/parameters.php.default /home/snack/interface/app/Config/parameters.php
     cp /home/snack/interface/app/Config/database.php.default /home/snack/interface/app/Config/database.php
@@ -257,7 +353,8 @@ function init {
     #####################################################
     echo "Configuring backups system..."
     mkdir -p $TFTP_FOLDER >> $OUT 2>>$LOG
-    cd $TFTP_FOLDER && git init >> $OUT 2>>$LOG
+    mkdir -p $BACKUP_FOLDER >> $OUT 2>>$LOG
+    cd $BACKUP_FOLDER && git init >> $OUT 2>>$LOG
 
 }
 
@@ -269,9 +366,11 @@ case $1 in
             confignagios || true
             configmunin || true
             installmodules || true
+	    installelasticsearch || true
             $USER_HOME/interface/tools/fixperms.sh || true
             restartservices || true
-            db_stop
+            service apache2 restart
+	    db_stop
         else
 	        line=`grep "Issuer: C=FR, ST=France, O=B.H. Consulting, CN=" /home/snack/cert/cacert.pem`
 	        regex="Issuer:.*CN=(.*)"
@@ -282,7 +381,6 @@ case $1 in
             createFilesfromTemplates || true
             confignagios || true
             installmodules || true
-            restartservices || true
             echo "UPGRADE from $2"
             echo "Delete cache of cakephp"
             rm $USER_HOME/interface/app/tmp/cache/persistent/my* || true
@@ -292,7 +390,6 @@ case $1 in
             cp /root/backup-snack/database.php /home/snack/interface/app/Config || true
             cp /root/backup-snack/core.php /home/snack/interface/app/Config || true
        	    #rm -rf /root/backup-snack || true
-            $USER_HOME/interface/tools/fixperms.sh || true
             db_stop
 	        if dpkg --compare-versions "$2" le 1.0-9; then
 	            sed -e "s/unique_subject\s*=\s*yes\s*/unique_subject = no/" -i $DEST_PATH/index.txt.attr
@@ -314,10 +411,10 @@ case $1 in
 		        # Symlink for the interface
 		        ln -s $DEST_PATH/private/$CA_CERT_CER $DEST_PATH/$CA_CERT_CER
 		        rsync -avr /home/snack/conf/cron.d /etc >> $OUT 2>>$LOG
-		        echo 'update radcheck set value="Ethernet|Wireless-802.11" where value="Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
-		        echo 'update radcheck set value="Async|Virtual|Ethernet|Wireless-802.11" where value="Async|Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
-		        echo 'update radcheck set value="Async|Ethernet|Wireless-802.11" where value="Async|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
-		        echo 'update radcheck set value="Virtual|Ethernet|Wireless-802.11" where value="Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASS} ${DATABASE} >> $OUT 2>>$LOG
+		        echo 'update radcheck set value="Ethernet|Wireless-802.11" where value="Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG
+		        echo 'update radcheck set value="Async|Virtual|Ethernet|Wireless-802.11" where value="Async|Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG
+		        echo 'update radcheck set value="Async|Ethernet|Wireless-802.11" where value="Async|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG
+		        echo 'update radcheck set value="Virtual|Ethernet|Wireless-802.11" where value="Virtual|Ethernet" and attribute="NAS-Port-Type";' | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG
 		        sed -e '0,/#\(\s*sql\)/s//\1/' -i $INNER_TUNNEL_VIRTUAL_SERVER >> $OUT 2>>$LOG
 		        service cron restart
 		        service freeradius restart
@@ -350,12 +447,33 @@ case $1 in
 	            echo "ALTER TABLE nas ADD backuptype varchar(255) default '';" | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG || true
 	        fi
             if dpkg --compare-versions "$2" le 1.0-88; then
-                key=$(openssl rand -base64 22)
+                key=$(openssl rand -base64 32)
                 sed -e "s/'Security\.snackkey',.*/'Security\.snackkey', '$key');/" -i /home/snack/interface/app/Config/core.php.default
                 cp /home/snack/interface/app/Config/core.php.default /home/snack/interface/app/Config/core.php
             fi
-	        service apache2 restart
+	        if dpkg --compare-versions "$2" le 1.0-95; then
+		        installelasticsearch || true
+	        fi
+	        if dpkg --compare-versions "$2" le 1.0-97; then
+		        key=$(makepasswd --chars 40)
+	            sed -e "s/'Security\.salt',.*/'Security\.salt', '$key');/" -i /home/snack/interface/app/Config/core.php.default
+	         	cp /home/snack/interface/app/Config/core.php.default /home/snack/interface/app/Config/core.php
+		        convertsnackusers || true
+		        mkdir -p $TFTP_FOLDER
+		        chown root:snack $TFTP_FOLDER
+		        chmod 770 $TFTP_FOLDER
+		        echo "Restarting Tftpd..."
+        		sudo service tftpd-hpa stop
+        		/usr/sbin/in.tftpd --listen --user snack --address 0.0.0.0:69 --secure $TFTP_FOLDER -c
+	        fi
+		if dpkg --compare-versions "$2" le 1.0-104; then
+		    echo "ALTER TABLE nas ADD backup boolean default false;" | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG || true
+		    echo "DELETE from radcheck where attribute='EAP-Type';" | mysql -uradius -p${PASSWORD_RADIUS} ${DATABASE} >> $OUT 2>>$LOG || true
+		fi
+	        #service apache2 restart
+            $USER_HOME/interface/tools/fixperms.sh || true
 	    fi
+	    restartservices || true
 	    exit 0
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)

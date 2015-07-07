@@ -156,6 +156,7 @@ CREATE TABLE radius.nas (
   password varchar(255),
   enablepassword varchar(255),
   backuptype varchar(255),
+  backup boolean DEFAULT FALSE,
   PRIMARY KEY (id),
   KEY nasname (nasname)
 );
@@ -220,3 +221,15 @@ CREATE TABLE radius.backups (
   restore varchar(64) DEFAULT NULL,
   PRIMARY KEY  (id)
 ) ;
+
+#
+# snackuser
+#
+CREATE TABLE snackuser (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50),
+    password VARCHAR(255),
+    role VARCHAR(20),
+    created DATETIME DEFAULT NULL,
+    modified DATETIME DEFAULT NULL
+);
