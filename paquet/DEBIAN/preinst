@@ -6,6 +6,7 @@ case $1 in
         ;;
     upgrade)
         echo "UPGRADE from $2"
+	rm /home/snack/conf/jinja/templates/etc/freeradius/proxy.conf.j2
         ;;
     abort-upgrade|abort-remove|abort-deconfigure)
         # Do nothing

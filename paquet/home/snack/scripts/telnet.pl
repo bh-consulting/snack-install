@@ -14,10 +14,6 @@ $command=$ARGV[4];
 my $session = Net::Telnet::Cisco->new(Host => $nas);
 $session->login($login, $password);
 
-# Execute a command
-my @output = $session->cmd($command);
-print @output;
-
 # Enable mode
 if (!$session->is_enabled) {
     if ($session->enable($enablepassword) ) {
@@ -26,6 +22,10 @@ if (!$session->is_enabled) {
     } else {
         warn "Can't enable: " . $session->errmsg;
     }
+} else {
+    # Execute a command
+    my @output = $session->cmd($command);
+    print @output;
 }
 $session->close;
 

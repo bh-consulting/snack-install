@@ -26,6 +26,7 @@ backup() {
             $SCRPATH/telnet.pl $host $login $pass $enablepassword "show run" > /tmp/$host
         fi
     fi
+    sed '/closed by remote host/d' -i /tmp/$host
     #chown -R snack:snack $GITPATH
     #chmod -R 770 $GITPATH
     if [[ "$res" == "0" ]]; then

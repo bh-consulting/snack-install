@@ -10,5 +10,4 @@ expect "yes/no" {
     send "yes\r"
     expect "*?assword" { send "[lindex $argv 2]\r" }
     } "*?assword" { send "[lindex $argv 2]\r" }
-    expect "#"
-
+    expect eof
