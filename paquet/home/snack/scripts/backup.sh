@@ -30,9 +30,10 @@ backup() {
     #chown -R snack:snack $GITPATH
     #chmod -R 770 $GITPATH
     if [[ "$res" == "0" ]]; then
+	sed -i '$ d' /tmp/$host
         result=$( sed -e '/^\s*$/d' /tmp/$host | grep "^[^c|^C]" | tail -1)
         #echo $result
-        if [[ $result =~ "end" ]]; then
+        if [[ $result =~ "end" || $result =~ "exit" ]]; then
 	    mv /tmp/$host $GITPATH/$host
             cd $GITPATH
             sed -i '/^! [Last|NVRAM]/d' $host
